@@ -1,0 +1,3 @@
+Input files:
+    grid_path: data/raw/vietnam_coast_tiles.geojson
+    modifications_path: data/raw/empty_modifications.geojson

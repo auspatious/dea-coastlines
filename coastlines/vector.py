@@ -25,20 +25,22 @@ import pandas as pd
 import xarray as xr
 import geohash as gh
 import geopandas as gpd
-from affine import Affine
+
+from sqlalchemy.exc import OperationalError
+
 from rasterio.features import sieve
 from scipy.stats import circstd, circmean, linregress
-from shapely.geometry import box
+
 from shapely.ops import nearest_points
 from skimage.measure import label, regionprops
 from skimage.morphology import (
     black_tophat,
-    binary_closing,
     binary_dilation,
     binary_erosion,
     dilation,
     disk,
 )
+import rioxarray  # noqa: F401
 
 import datacube
 from datacube.utils.aws import configure_s3_access
@@ -131,14 +133,17 @@ def load_rasters(
             time_var = xr.Variable("year", [int(i.split("/")[-1][0:4]) for i in paths])
 
             # Import data
-            layer_da = xr.concat([xr.open_rasterio(i) for i in paths], dim=time_var)
-            layer_da.name = f"{layer_name}"
+            layer_da = xr.concat(
+                [xr.open_dataset(i, engine="rasterio") for i in paths],
+                dim=time_var
+            )
+            layer_da = layer_da.rename({"band_data": layer_name})
 
             # Append to file
             da_list.append(layer_da)
 
         # Combine into a single dataset and restrict to start and end year
-        layer_ds = xr.merge(da_list).squeeze("band", drop=True)
+        layer_ds = xr.merge(da_list, compat="override").squeeze("band", drop=True)
         layer_ds = layer_ds.sel(year=slice(str(start_year), str(end_year)))
 
         # Append to list
@@ -620,10 +625,10 @@ def contours_preprocess(
             like=combined_ds.odc.geobox.compat,
         ).land.squeeze("time")
         ocean_da = xr.apply_ufunc(binary_erosion, geodata_da == 0, disk(10))
-    except AttributeError:
+    except (AttributeError, OperationalError):
         ocean_da = odc.geo.xr.xr_zeros(combined_ds.odc.geobox) == 0
     except ValueError:  # Temporary workaround for no geodata access for tests
-        ocean_da = xr.apply_ufunc(binary_erosion, all_time_20==0, disk(20))
+        ocean_da = xr.apply_ufunc(binary_erosion, all_time_20 == 0, disk(20))
 
     # Use all time and Geodata 100K data to produce the buffered coastal
     # study area. The output has values of 0 representing non-coastal
