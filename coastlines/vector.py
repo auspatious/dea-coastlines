@@ -489,7 +489,7 @@ def contours_preprocess(
     water_index,
     index_threshold,
     buffer_pixels=50,
-    mask_with_cci_lc=False,
+    mask_with_esa_wc=False,
     mask_temporal=True,
     mask_modifications=None,
     debug=False,
@@ -688,8 +688,7 @@ def contours_preprocess(
     )
 
     ocean_mask = None
-    if mask_with_cci_lc:
-        # Load some data from ESA's land cover
+    if mask_with_esa_wc:
         from planetary_computer import sign
         from odc.stac import load
         from pystac_client import Client
@@ -701,21 +700,22 @@ def contours_preprocess(
         bb = combined_ds.odc.geobox.boundingbox.to_crs(4326)
         bbox = [bb.left, bb.bottom, bb.right, bb.top]
         crs = combined_ds.odc.geobox.crs.epsg
+        lc_year = "2021"
+        band_name = "map"
+        water_value = 80
+        collection = "esa-worldcover"
 
-        # Landcover only goes up to 2020, so we can't actually use a per-year landcover
-        # which would probably be overkill anyway.
-        # timebounds = f"{yearly_ds.year.values[0]}/{yearly_ds.year.values[-1]}"
-
-        items = sign(pc_client.search(collections=["esa-cci-lc"], bbox=bbox, datetime="2020").get_all_items())
+        items = sign(pc_client.search(collections=[collection], bbox=bbox, datetime=lc_year).get_all_items())
 
         landcover = load(sign(items), bbox=bbox, crs=crs, resolution=30)
 
         # Create a binary mask for water
-        ocean_mask = mask_cleanup(landcover.lccs_class == 210, [("erosion", 50)]).squeeze(dim="time")
+        ocean_mask = mask_cleanup(landcover[band_name] == water_value, [("erosion", 20)]).squeeze(dim="time")
 
         masked_ds = masked_ds.where(~ocean_mask)
-        # don't know why the CRS is being lost here...
+        # Don't know why the CRS is being lost here...
         masked_ds = masked_ds.odc.assign_crs(crs)
+
 
     # Generate annual vector polygon masks containing information
     # about the certainty of each shoreline feature
