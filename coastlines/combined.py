@@ -49,13 +49,21 @@ def load_and_mask_data_with_stac(config: dict, query: dict, log) -> xr.Dataset:
     collections = config["STAC config"]["stac_collections"]
 
     client = Client.open(stac_api_url)
-    items = list(client.search(collections=collections, **query).get_all_items())
+    # Filtering for Tier1 data only
+    items = list(client.search(
+        collections=collections,
+        query={"landsat:collection_category": {"in": ["T1"]}},
+        **query
+    ).get_all_items())
 
     epsg_codes = Counter(item.properties["proj:epsg"] for item in items)
     most_common_epsg = epsg_codes.most_common(1)[0][0]
 
     log.info(f"Found {len(items)} items. Using epsg:{most_common_epsg} to load data.")
 
+    # REMINDER!
+    # TODO: Add a query for Tier 1 data ONLY!
+    # /REMINDER!
     ds = load(
         items,
         bands=["green", "swir16", "qa_pixel"],
