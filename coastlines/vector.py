@@ -562,11 +562,6 @@ def contours_preprocess(
         problematic region. This is used to assign each output shoreline
         with a certainty column.
     """
-
-    assert (
-        yearly_ds is not None and gapfill_ds is None
-    ), "If you provide the yearly dataset you must provide the gapfill dataset too"
-
     if yearly_ds is None and gapfill_ds is None:
         assert (
             combined_ds is not None
