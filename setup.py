@@ -76,6 +76,7 @@ setup_kwargs = {
             "deacoastlines-raster = coastlines.raster:generate_rasters_cli",
             "deacoastlines-vector = coastlines.vector:generate_vectors_cli",
             "deacoastlines-continental = coastlines.continental:continental_cli",
+            "deacoastlines-combined = coastlines.combined:combined_cli",
         ]
     },
 }

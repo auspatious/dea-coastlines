@@ -17,36 +17,40 @@ import sys
 import warnings
 
 import click
-import pyproj
-import odc.algo
-import odc.geo.xr
-import numpy as np
-import pandas as pd
-import xarray as xr
+import datacube
 import geohash as gh
 import geopandas as gpd
-
-from sqlalchemy.exc import OperationalError
-
+import numpy as np
+import odc.algo
+import odc.geo.xr
+import pandas as pd
+import pyproj
+import rioxarray  # noqa: F401
+import xarray as xr
+from datacube.utils.aws import configure_s3_access
+from dea_tools.spatial import subpixel_contours, xr_rasterize, xr_vectorize
 from rasterio.features import sieve
-from scipy.stats import circstd, circmean, linregress
-
+from scipy.stats import circmean, circstd, linregress
 from shapely.ops import nearest_points
 from skimage.measure import label, regionprops
 from skimage.morphology import (
-    black_tophat,
     binary_dilation,
     binary_erosion,
+    black_tophat,
     dilation,
     disk,
 )
-import rioxarray  # noqa: F401
+from sqlalchemy.exc import OperationalError
 
-import datacube
-from datacube.utils.aws import configure_s3_access
-
-from coastlines.utils import configure_logging, load_config
-from dea_tools.spatial import subpixel_contours, xr_vectorize, xr_rasterize
+from coastlines.utils import (
+    click_baseline_year,
+    click_end_year,
+    click_index_threshold,
+    click_start_year,
+    click_config_path,
+    configure_logging,
+    load_config,
+)
 
 # Hide specific warnings
 warnings.simplefilter(action="ignore", category=FutureWarning)
@@ -107,12 +111,10 @@ def load_rasters(
     ds_list = []
 
     for layer_type in [".tif", "_gapfill.tif"]:
-
         # List to hold output DataArrays
         da_list = []
 
         for layer_name in [f"{water_index}", "count", "stdev"]:
-
             # Get paths of files that match pattern
             paths = glob.glob(
                 f"{path}/{raster_version}/"
@@ -134,8 +136,7 @@ def load_rasters(
 
             # Import data
             layer_da = xr.concat(
-                [xr.open_dataset(i, engine="rasterio") for i in paths],
-                dim=time_var
+                [xr.open_dataset(i, engine="rasterio") for i in paths], dim=time_var
             )
             layer_da = layer_da.rename({"band_data": layer_name})
 
@@ -287,7 +288,6 @@ def temporal_masking(ds):
     """
 
     def _noncontiguous(labels, intensity):
-
         # For each blob of land, obtain whether it intersected with land in
         # any neighbouring timestep
         region_props = regionprops(labels.values, intensity_image=intensity.values)
@@ -416,7 +416,6 @@ def certainty_masking(yearly_ds, obs_threshold=5, stdev_threshold=0.3, sieve_siz
 
     # Process in parallel
     with ProcessPoolExecutor() as executor:
-
         # Apply func in parallel, repeating params for each iteration
         groups = [group for (i, group) in raster_mask.groupby("year")]
         to_iterate = (
@@ -456,7 +455,6 @@ def contour_certainty(contours_gdf, certainty_masks):
     # Loop through each annual shoreline and attribute data with certainty
     out_list = []
     for year, _ in contours_gdf.iterrows():
-
         # Extract year
         contour_gdf = contours_gdf.loc[[year]]
 
@@ -565,10 +563,14 @@ def contours_preprocess(
         with a certainty column.
     """
 
-    assert yearly_ds is not None and gapfill_ds is None, "If you provide the yearly dataset you must provide the gapfill dataset too"
+    assert (
+        yearly_ds is not None and gapfill_ds is None
+    ), "If you provide the yearly dataset you must provide the gapfill dataset too"
 
     if yearly_ds is None and gapfill_ds is None:
-        assert combined_ds is not None, "You need to either provide yearly and gapfill or combined datasets"
+        assert (
+            combined_ds is not None
+        ), "You need to either provide yearly and gapfill or combined datasets"
 
     # Remove low obs pixels and replace with 3-year gapfill
     if yearly_ds is not None:
@@ -653,10 +655,8 @@ def contours_preprocess(
     # polygons to add missing areas of shoreline, or remove unwanted
     # areas from the mask.
     if mask_modifications is not None:
-
         # Only proceed if there are polygons available
         if len(mask_modifications.index) > 0:
-
             # Convert type column to integer, with 1 representing pixels
             # to add to the coastal mask (by setting them as "coastal"
             # pixels, and 2 representing pixels to remove from the mask
@@ -696,10 +696,10 @@ def contours_preprocess(
 
     ocean_mask = None
     if mask_with_esa_wc:
-        from planetary_computer import sign
-        from odc.stac import load
-        from pystac_client import Client
         from odc.algo import mask_cleanup
+        from odc.stac import load
+        from planetary_computer import sign
+        from pystac_client import Client
 
         pc_url = "https://planetarycomputer.microsoft.com/api/stac/v1/"
         pc_client = Client.open(pc_url)
@@ -712,17 +712,22 @@ def contours_preprocess(
         water_value = 80
         collection = "esa-worldcover"
 
-        items = sign(pc_client.search(collections=[collection], bbox=bbox, datetime=lc_year).get_all_items())
+        items = sign(
+            pc_client.search(
+                collections=[collection], bbox=bbox, datetime=lc_year
+            ).get_all_items()
+        )
 
         landcover = load(sign(items), bbox=bbox, crs=crs, resolution=30)
 
         # Create a binary mask for water
-        ocean_mask = mask_cleanup(landcover[band_name] == water_value, [("erosion", 20)]).squeeze(dim="time")
+        ocean_mask = mask_cleanup(
+            landcover[band_name] == water_value, [("erosion", 20)]
+        ).squeeze(dim="time")
 
         masked_ds = masked_ds.where(~ocean_mask)
         # Don't know why the CRS is being lost here...
         masked_ds = masked_ds.odc.assign_crs(crs)
-
 
     # Generate annual vector polygon masks containing information
     # about the certainty of each shoreline feature
@@ -854,7 +859,6 @@ def annual_movements(
 
     # Iterate through all comparison years in contour gdf
     for comp_year in years:
-
         # Set comparison contour
         comp_contour = contours_gdf.loc[[comp_year]].geometry.iloc[0]
 
@@ -1520,12 +1524,10 @@ def generate_vectors(
 
     # Extract statistics modelling points along baseline shoreline
     try:
-
         points_gdf = points_on_line(contours_gdf, str(baseline_year), distance=30)
         log.info(f"Study area {study_area}: Extracted rates of change points")
 
     except KeyError:
-
         log.warning(
             f"Study area {study_area}: Baseline year {baseline_year} missing from annual shorelines; unable to extract rates of change points"
         )
@@ -1533,7 +1535,6 @@ def generate_vectors(
 
     # If any points exist in the dataset
     if points_gdf is not None and len(points_gdf) > 0:
-
         # Calculate annual coastline movements and residual tide heights
         # for every contour compared to the baseline year
         points_gdf = annual_movements(
@@ -1665,7 +1666,6 @@ def generate_vectors(
         )
 
         try:
-
             # Export to GeoJSON
             points_gdf_clipped.to_crs("EPSG:4326").to_file(
                 f"{stats_path}.geojson",
@@ -1682,7 +1682,8 @@ def generate_vectors(
             )
 
         except ValueError:
-            log.warning(f"Study area {study_area}: No vector points data to export after clipping to study area extent"
+            log.warning(
+                f"Study area {study_area}: No vector points data to export after clipping to study area extent"
             )
 
     else:
@@ -1713,7 +1714,6 @@ def generate_vectors(
     contours_gdf_clipped = contours_gdf.clip(gridcell_gdf)
 
     try:
-
         # Export to GeoJSON
         contours_gdf_clipped.to_crs("EPSG:4326").to_file(
             f"{contour_path}.geojson", driver="GeoJSON"
@@ -1737,14 +1737,7 @@ def generate_vectors(
 
 
 @click.command()
-@click.option(
-    "--config_path",
-    type=str,
-    required=True,
-    help="Path to the YAML config file defining inputs to "
-    "use for this analysis. These are typically located in "
-    "the `dea-coastlines/configs/` directory.",
-)
+@click_config_path
 @click.option(
     "--study_area",
     type=str,
@@ -1784,34 +1777,10 @@ def generate_vectors(
     "index to use for shoreline extraction. "
     'Defaults to "mndwi".',
 )
-@click.option(
-    "--index_threshold",
-    type=float,
-    default=0.00,
-    help="The water index threshold used to extract "
-    "subpixel precision shorelines. Defaults to 0.00.",
-)
-@click.option(
-    "--start_year",
-    type=int,
-    default=1988,
-    help="The first annual shoreline to extract from the input raster data.",
-)
-@click.option(
-    "--end_year",
-    type=int,
-    default=2021,
-    help="The final annual shoreline to extract from the input raster data.",
-)
-@click.option(
-    "--baseline_year",
-    type=int,
-    default=2021,
-    help="The annual shoreline used as a baseline from "
-    "which to generate the rates of change point statistics. "
-    "This is typically the most recent annual shoreline in "
-    "the dataset (i.e. the same as `--end_year`).",
-)
+@click_index_threshold
+@click_start_year
+@click_end_year
+@click_baseline_year
 @click.option(
     "--aws_unsigned/--no-aws_unsigned",
     type=bool,
@@ -1838,7 +1807,6 @@ def generate_vectors_cli(
     aws_unsigned,
     overwrite,
 ):
-
     log = configure_logging(f"Coastlines vector generation for study area {study_area}")
 
     # If no vector version is provided, copy raster version
