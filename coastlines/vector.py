@@ -484,10 +484,11 @@ def contour_certainty(contours_gdf, certainty_masks):
 
 
 def contours_preprocess(
-    yearly_ds,
-    gapfill_ds,
-    water_index,
-    index_threshold,
+    combined_ds=None,
+    yearly_ds=None,
+    gapfill_ds=None,
+    water_index="mndwi",
+    index_threshold=0.0,
     buffer_pixels=50,
     mask_with_esa_wc=False,
     mask_temporal=True,
@@ -564,12 +565,18 @@ def contours_preprocess(
         with a certainty column.
     """
 
+    assert yearly_ds is not None and gapfill_ds is None, "If you provide the yearly dataset you must provide the gapfill dataset too"
+
+    if yearly_ds is None and gapfill_ds is None:
+        assert combined_ds is not None, "You need to either provide yearly and gapfill or combined datasets"
+
     # Remove low obs pixels and replace with 3-year gapfill
-    combined_ds = yearly_ds.where(yearly_ds["count"] > 5, gapfill_ds)
+    if yearly_ds is not None:
+        combined_ds = yearly_ds.where(yearly_ds["count"] > 5, gapfill_ds)
 
     # Set any pixels with only one observation to NaN, as these are
     # extremely vulnerable to noise
-    combined_ds = combined_ds.where(yearly_ds["count"] > 1)
+    combined_ds = combined_ds.where(combined_ds["count"] > 1)
 
     # Apply water index threshold and re-apply nodata values
     nodata = combined_ds[water_index].isnull()
@@ -658,7 +665,7 @@ def contours_preprocess(
 
             # Rasterise polygons into extent of satellite data
             modifications_da = xr_rasterize(
-                mask_modifications, da=yearly_ds, attribute_col="type"
+                mask_modifications, da=combined_ds, attribute_col="type"
             )
 
             # Where `modifications_da` has a value other than 0,
