@@ -108,9 +108,15 @@ def generate_yearly_composites(
     start_year: int,
     end_year: int,
 ) -> xr.Dataset:
-    # Filter out the extreme high and low tide pixedls
+    # Load everything into memory once
+    ds = ds.compute()
+
+    # Filter out the extreme high- and low-tide pixels
     extreme_tides = (ds.tide_m <= tide_cutoff_min) | (ds.tide_m >= tide_cutoff_max)
-    ds = erase_bad(ds, extreme_tides)
+    ds = ds.where(~extreme_tides)
+
+    # Filter out empty scenes
+    ds = ds.sel(time=extreme_tides.sum(dim=["x", "y"]) == 0)
 
     # Need two output arrays `yearly_ds` and `gapfill_ds`, each with `mndwi`, `count` and `stddev`.
     yearly_ds_list = []
@@ -139,10 +145,6 @@ def generate_yearly_composites(
 
     yearly_ds = xr.concat(yearly_ds_list, dim=time_var)
     gapfill_ds = xr.concat(gapfill_ds_list, dim=time_var)
-
-    # Chunking gets messed up here, so we rechunk deliberately
-    yearly_ds = yearly_ds.chunk({"x": 4000, "y": 4000, "year": 1})
-    gapfill_ds = gapfill_ds.chunk({"x": 4000, "y": 4000, "year": 1})
 
     return yearly_ds, gapfill_ds
 
