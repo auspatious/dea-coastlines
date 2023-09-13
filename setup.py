@@ -32,6 +32,7 @@ REQUIRED = [
     "odc-geo",
     "odc_ui",
     "pandas",
+    "pyarrow",
     "pyproj",
     "pyTMD",
     "python_geohash",

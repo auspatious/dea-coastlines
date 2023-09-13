@@ -34,7 +34,6 @@ attrs==23.1.0
     #   fiona
     #   jsonschema
     #   rasterio
-    #   referencing
 backcall==0.2.0
     # via ipython
 boto3==1.28.46
@@ -286,6 +285,7 @@ numpy==1.24.4
     #   odc-ui
     #   pandas
     #   pims
+    #   pyarrow
     #   pytmd
     #   pywavelets
     #   rasterio
@@ -367,6 +367,8 @@ ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.2
     # via stack-data
+pyarrow==13.0.0
+    # via dea-coastlines (setup.py)
 pydantic==2.3.0
     # via planetary-computer
 pydantic-core==2.6.3

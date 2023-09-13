@@ -1,7 +1,6 @@
 import sys
 from collections import Counter
 from pathlib import Path
-from shutil import rmtree
 
 import click
 import geopandas as gpd
