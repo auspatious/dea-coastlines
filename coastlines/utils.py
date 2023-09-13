@@ -5,8 +5,14 @@ from pathlib import Path
 import click
 from datacube.utils.geometry import Geometry
 import geopandas as gpd
+from geopandas import GeoDataFrame
 
 STYLES_FILE = Path(__file__).parent / "styles.csv"
+
+
+# Create our own exception to raise
+class CoastlinesException(Exception):
+    pass
 
 
 def configure_logging(name: str = "Coastlines") -> logging.Logger:
@@ -37,14 +43,20 @@ def load_config(config_path: str) -> dict:
     return config
 
 
-def get_study_site_geometry(grid_path: str, study_area: str) -> Geometry:
-    # Grid cells used to process the analysis
+def load_json(grid_path: str) -> GeoDataFrame:
     gridcell_gdf = (
         gpd.read_file(grid_path)
         .to_crs(epsg=4326)
         .set_index("id")
     )
     gridcell_gdf.index = gridcell_gdf.index.astype(str)
+
+    return gridcell_gdf
+
+
+def get_study_site_geometry(grid_path: str, study_area: str) -> Geometry:
+    # Grid cells used to process the analysis
+    gridcell_gdf = load_json(grid_path)
     gridcell_gdf = gridcell_gdf.loc[[study_area]]
 
     return Geometry(gridcell_gdf.iloc[0].values[0], crs=gridcell_gdf.crs)
@@ -96,7 +108,7 @@ click_end_year = click.option(
     "datacube after `--end_year`.",
 )
 click_baseline_year = click.option(
-    "--baseline_year",
+    "--baseline-year",
     type=int,
     default=2021,
     help="The annual shoreline used as a baseline from "

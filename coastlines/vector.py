@@ -489,7 +489,6 @@ def contours_preprocess(
     index_threshold=0.0,
     buffer_pixels=50,
     mask_with_esa_wc=False,
-    mask_temporal=True,
     mask_modifications=None,
     debug=False,
 ):
@@ -1288,7 +1287,7 @@ def rocky_shoreline_flag(
     # each unique index value (i.e. True if there are both True and False)
     # to account for edge case where nearest geomorphology is the corner
     # of two vector features
-    return (joined["rocky"] == True).groupby(joined.index).max()
+    return (joined["rocky"] == True).groupby(joined.index).max()  # noqa
 
 
 def region_atttributes(gdf, region_gdf, attribute_col="TERRITORY1", rename_col=False):

@@ -13,16 +13,31 @@ from odc.stac import configure_s3_access, load
 from pystac_client import Client
 
 from coastlines.raster import tide_cutoffs
-from coastlines.utils import (click_aws_request_payer, click_aws_unsigned,
-                              click_baseline_year, click_buffer,
-                              click_config_path, click_end_year,
-                              click_index_threshold, click_overwrite,
-                              click_start_year, click_study_area,
-                              click_tide_centre, configure_logging,
-                              get_study_site_geometry, load_config)
-from coastlines.vector import (all_time_stats, annual_movements,
-                               calculate_regressions, contours_preprocess,
-                               points_on_line, subpixel_contours)
+from coastlines.utils import (
+    click_aws_request_payer,
+    click_aws_unsigned,
+    click_baseline_year,
+    click_buffer,
+    click_config_path,
+    click_end_year,
+    click_index_threshold,
+    click_overwrite,
+    click_start_year,
+    click_study_area,
+    click_tide_centre,
+    configure_logging,
+    get_study_site_geometry,
+    load_config,
+    CoastlinesException,
+)
+from coastlines.vector import (
+    all_time_stats,
+    annual_movements,
+    calculate_regressions,
+    contours_preprocess,
+    points_on_line,
+    subpixel_contours,
+)
 
 # TODO: work out how to pass this in...
 STAC_CFG = {
@@ -48,16 +63,26 @@ def load_and_mask_data_with_stac(config: dict, query: dict, log) -> xr.Dataset:
     stac_api_url = config["STAC config"]["stac_api_url"]
     collections = config["STAC config"]["stac_collections"]
 
+    log.info(f"Loading data from {stac_api_url} for collections {collections}")
+
     client = Client.open(stac_api_url)
     # Filtering for Tier1 data only
-    items = list(client.search(
-        collections=collections,
-        query={"landsat:collection_category": {"in": ["T1"]}},
-        **query
-    ).get_all_items())
+    items = list(
+        client.search(
+            collections=collections,
+            query={"landsat:collection_category": {"in": ["T1"]}},
+            **query,
+        ).get_all_items()
+    )
 
     epsg_codes = Counter(item.properties["proj:epsg"] for item in items)
     most_common_epsg = epsg_codes.most_common(1)[0][0]
+
+    n_items = len(items)
+    if n_items < 50:
+        raise CoastlinesException(
+            f"Found {n_items} items. This is not enough to do a reliable process."
+        )
 
     log.info(f"Found {len(items)} items. Using epsg:{most_common_epsg} to load data.")
 
@@ -100,7 +125,9 @@ def load_and_mask_data_with_stac(config: dict, query: dict, log) -> xr.Dataset:
     ds["swir16"] = to_f32(ds["swir16"], scale=0.0000275, offset=-0.2)
 
     # Remove values outside the valid range (0-1)
-    mask_invalid = (ds["green"] < 0) | (ds["green"] > 1) | (ds["swir16"] < 0) | (ds["swir16"] > 1)
+    mask_invalid = (
+        (ds["green"] < 0) | (ds["green"] > 1) | (ds["swir16"] < 0) | (ds["swir16"] > 1)
+    )
     ds = erase_bad(ds, mask_invalid)
 
     # Create MNDWI
@@ -126,9 +153,8 @@ def generate_yearly_composites(
     # Filter out empty scenes
     ds = ds.sel(time=extreme_tides.sum(dim=["x", "y"]) == 0)
 
-    # Need two output arrays `yearly_ds` and `gapfill_ds`, each with `mndwi`, `count` and `stddev`.
+    # Store a list of output arrays and years, knowing we might lose empty years
     yearly_ds_list = []
-    gapfill_ds_list = []
     years = range(start_year, end_year + 1)
 
     # We've found data for start_year - 1 through to end_year + 1.
@@ -140,24 +166,25 @@ def generate_yearly_composites(
         year_summary = one_year.mndwi.median(dim="time").to_dataset()
         year_summary["count"] = one_year.mndwi.count(dim="time")
         year_summary["stdev"] = one_year.mndwi.std(dim="time")
-
-        # Get the gapfill data for the current year
-        gapfill_summary = three_years.mndwi.median(dim="time").to_dataset()
-        gapfill_summary["count"] = three_years.mndwi.count(dim="time")
-        gapfill_summary["stdev"] = three_years.mndwi.std(dim="time")
+        # And a gapfill summary for the years either side of the year we're processing
+        year_summary["gapfill"] = three_years.mndwi.median(dim="time").to_dataset()
 
         yearly_ds_list.append(year_summary)
-        gapfill_ds_list.append(gapfill_summary)
 
     time_var = xr.Variable("year", years)
 
     yearly_ds = xr.concat(yearly_ds_list, dim=time_var)
-    gapfill_ds = xr.concat(gapfill_ds_list, dim=time_var)
 
-    return yearly_ds, gapfill_ds
+    return yearly_ds
 
 
-def export_results(points_gdf: gpd.GeoDataFrame, contours_gdf: gpd.GeoDataFrame, output_version: str, output_location: Path, study_area: str):
+def export_results(
+    points_gdf: gpd.GeoDataFrame,
+    contours_gdf: gpd.GeoDataFrame,
+    output_version: str,
+    output_location: Path,
+    study_area: str,
+):
     output_location = output_location / output_version
     output_location.mkdir(parents=True, exist_ok=True)
 
@@ -192,7 +219,9 @@ def process_coastlines(
 ):
     # Output location checking
     output_location = Path(output_location)
-    output_contours = output_location / output_version / f"contours_{study_area}.parquet"
+    output_contours = (
+        output_location / output_version / f"contours_{study_area}.parquet"
+    )
 
     if output_contours.exists() and not overwrite:
         log.info(
@@ -226,13 +255,16 @@ def process_coastlines(
 
     # Create annual composites including gapfilling sparse years
     log.info("Generating annual mosaics using dask lazy loading")
-    tide_cutoff_min, tide_cutoff_max = tide_cutoffs(ds, tides_lowres, tide_centre=tide_centre)
-    yearly_ds, gapfill_ds = generate_yearly_composites(
+    tide_cutoff_min, tide_cutoff_max = tide_cutoffs(
+        ds, tides_lowres, tide_centre=tide_centre
+    )
+    yearly_ds = generate_yearly_composites(
         ds, tide_cutoff_min, tide_cutoff_max, start_year, end_year
     )
 
     log.info("Loading combined dataset into memory...")
-    combined_ds = yearly_ds.where(yearly_ds["count"] > 5, gapfill_ds).compute()
+    combined_ds = yearly_ds.where(yearly_ds["count"] > 5, yearly_ds["gapfill"]).compute()
+    del combined_ds["gapfill"]
     log.info("Finished loading into memory")
 
     # TODO: optionally write the combined_ds to a Zarr file somewhere
@@ -245,9 +277,9 @@ def process_coastlines(
 
     # Mask dataset to focus on coastal zone only
     masked_ds, _ = contours_preprocess(
-        combined_ds,
-        "mndwi",
-        index_threshold,
+        combined_ds=combined_ds,
+        water_index="mndwi",
+        index_threshold=index_threshold,
         mask_with_esa_wc=True,
         buffer_pixels=33,
         mask_modifications=modifications_gdf,
@@ -296,11 +328,13 @@ def process_coastlines(
     output_location = Path("data/processed")
 
     log.info(f"Writing to files at {output_location}")
-    export_results(points_gdf, contours_gdf, output_version, output_location, study_area)
+    export_results(
+        points_gdf, contours_gdf, output_version, output_location, study_area
+    )
     log.info(f"Finished work on study area {study_area}")
 
 
-@click.command("coastlines")
+@click.command("coastlines-combined")
 @click_config_path
 @click_study_area
 @click.option(
@@ -326,7 +360,7 @@ def process_coastlines(
 @click_aws_unsigned
 @click_aws_request_payer
 @click_overwrite
-def coastlines(
+def cli(
     config_path,
     study_area,
     output_version,
@@ -342,7 +376,8 @@ def coastlines(
     aws_request_payer,
     overwrite,
 ):
-    log = configure_logging(f"Coastlines raster generation for study area {study_area}")
+    log = configure_logging(f"Coastlines {study_area}")
+    log.info(f"Starting work on study area {study_area}")
 
     # Load analysis params from config file
     config = load_config(config_path=config_path)
@@ -358,15 +393,18 @@ def coastlines(
     if aws_unsigned and aws_request_payer:
         raise ValueError("Cannot set both aws_unsigned and aws_request_payer to True")
 
+    log.info("Configuring S3 access")
     # Do an opinionated configuration of S3
     configure_s3_access(
         cloud_defaults=True, aws_unsigned=aws_unsigned, requester_pays=aws_request_payer
     )
 
+    log.info("Starting Dask")
     # Set up Dask
     start_local_dask(n_workers=8, threads_per_worker=4, mem_safety_margin="2G")
 
     try:
+        log.info("Starting processing...")
         process_coastlines(
             config,
             study_area,
@@ -389,4 +427,4 @@ def coastlines(
 
 
 if __name__ == "__main__":
-    coastlines()
+    cli()
