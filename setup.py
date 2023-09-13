@@ -45,7 +45,7 @@ REQUIRED = [
     "setuptools",
     "Shapely",
     "tqdm",
-    "xarray"
+    "xarray",
 ]
 
 # Package metadata

@@ -13,7 +13,9 @@ _ = configure_s3_access(requester_pays=True, cloud_defaults=True)
 
 def http_to_s3_url(http_url):
     """Convert a USGS HTTP URL to an S3 URL"""
-    s3_url = http_url.replace('https://landsatlook.usgs.gov/data', 's3://usgs-landsat').rstrip(":1")
+    s3_url = http_url.replace(
+        "https://landsatlook.usgs.gov/data", "s3://usgs-landsat"
+    ).rstrip(":1")
     return s3_url
 
 
@@ -33,7 +35,12 @@ def load_data(items):
     ds = load(
         items,
         bands=["green", "swir16", "qa_pixel"],
-        bbox=[104.53400728165435, 8.543114824509242, 105.05268961831959, 9.095592649285232],
+        bbox=[
+            104.53400728165435,
+            8.543114824509242,
+            105.05268961831959,
+            9.095592649285232,
+        ],
         datetime="2023-01",
         crs=most_common_epsg,
         resolution=30,
@@ -41,7 +48,7 @@ def load_data(items):
         chunks={"x": 2000, "y": 2000, "time": 1},
         group_by="solar_day",
         patch_url=http_to_s3_url,
-        fail_on_error=False
+        fail_on_error=False,
     )
 
     # Get the nodata mask

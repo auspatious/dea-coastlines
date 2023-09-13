@@ -37,7 +37,7 @@ def test_parse_string(in_string, expected):
 
 @pytest.mark.parametrize(
     "subset,len_expected",
-    [('["31,15"]', 1), ('["31,15", "29,16"]', 2), ('[]', 256)],
+    [('["31,15"]', 1), ('["31,15", "29,16"]', 2), ("[]", 256)],
 )
 def test_subsetting(subset, len_expected):
     tiles = load_json(LOCAL_TILES_FILE)

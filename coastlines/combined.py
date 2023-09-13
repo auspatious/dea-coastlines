@@ -263,7 +263,9 @@ def process_coastlines(
     )
 
     log.info("Loading combined dataset into memory...")
-    combined_ds = yearly_ds.where(yearly_ds["count"] > 5, yearly_ds["gapfill"]).compute()
+    combined_ds = yearly_ds.where(
+        yearly_ds["count"] > 5, yearly_ds["gapfill"]
+    ).compute()
     del combined_ds["gapfill"]
     log.info("Finished loading into memory")
 

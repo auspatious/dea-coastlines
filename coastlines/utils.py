@@ -44,11 +44,7 @@ def load_config(config_path: str) -> dict:
 
 
 def load_json(grid_path: str) -> GeoDataFrame:
-    gridcell_gdf = (
-        gpd.read_file(grid_path)
-        .to_crs(epsg=4326)
-        .set_index("id")
-    )
+    gridcell_gdf = gpd.read_file(grid_path).to_crs(epsg=4326).set_index("id")
     gridcell_gdf.index = gridcell_gdf.index.astype(str)
 
     return gridcell_gdf
@@ -140,7 +136,6 @@ click_aws_unsigned = click.option(
     type=bool,
     default=True,
     help="Whether to use sign AWS requests for S3 access",
-    
 )
 click_aws_request_payer = click.option(
     "--aws-request-payer/--no-aws-request-payer",
