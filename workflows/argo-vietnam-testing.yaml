@@ -153,8 +153,8 @@ spec:
         
             echo "Downloading tide model"
             wget https://s3.ap-southeast-2.amazonaws.com/files.auspatious.com/coastlines/vietnam_tide_models.zip \
-              -O /tmp/vietnam_tide_models.zip
-            unzip /tmp/vietnam_tide_models.zip -d /tmp/tide_models_temp
+              -O /tmp/vietnam_tide_models.zip && \
+            unzip /tmp/vietnam_tide_models.zip -d /tmp/tide_models_temp &&
             mv /tmp/tide_models_temp/tide_models_clipped /tmp/tide_models
 
             echo "Running coastlines"

@@ -167,7 +167,7 @@ def generate_yearly_composites(
         year_summary["count"] = one_year.mndwi.count(dim="time")
         year_summary["stdev"] = one_year.mndwi.std(dim="time")
         # And a gapfill summary for the years either side of the year we're processing
-        year_summary["gapfill"] = three_years.mndwi.median(dim="time").to_dataset()
+        year_summary["gapfill"] = three_years.mndwi.median(dim="time")
 
         yearly_ds_list.append(year_summary)
 
@@ -192,10 +192,10 @@ def export_results(
     output_points = output_location / f"points_{study_area}.parquet"
 
     if output_contours.exists():
-        rmtree(output_contours)
+        output_contours.unlink()
 
     if output_points.exists():
-        rmtree(output_points)
+        output_points.unlink()
 
     points_gdf.to_parquet(output_points)
     contours_gdf.to_parquet(output_contours)
