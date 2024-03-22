@@ -132,9 +132,8 @@ spec:
           app: "argo-coastlines-merge-{{workflow.name}}"
       inputs:
         parameters:
+          - name: config
           - name: result-version
-          - name: result-location
-          - name: baseline-year
       container:
         image: ghcr.io/auspatious/dea-coastlines:{{workflow.parameters.image-tag}}
         imagePullPolicy: IfNotPresent
@@ -149,8 +148,5 @@ spec:
         args:
           - |
             coastlines-merge \
-              --input-location={{inputs.parameters.result-location}}/{{inputs.parameters.result-version}} \
-              --output-location={{inputs.parameters.result-location}} \
-              --output-version={{inputs.parameters.result-version}} \
-              --baseline-year={{inputs.parameters.baseline-year}} \
-              --output-crs="EPSG:3405"
+              --config-path={{inputs.parameters.config}} \
+              --output-version={{inputs.parameters.result-version}}
