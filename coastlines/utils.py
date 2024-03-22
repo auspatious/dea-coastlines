@@ -73,7 +73,12 @@ def load_json(grid_path: str) -> GeoDataFrame:
 def get_study_site_geometry(grid_path: str, study_area: str) -> gpd.GeoDataFrame:
     # Grid cells used to process the analysis
     gridcell_gdf = load_json(grid_path)
-    gridcell_gdf = gridcell_gdf.loc[[study_area]]
+    try:
+        gridcell_gdf = gridcell_gdf.loc[[study_area]]
+    except KeyError as e:
+        raise CoastlinesException(
+            f"Study area {study_area} not found in grid file"
+        ) from e
 
     return gridcell_gdf
 
@@ -241,7 +246,7 @@ click_index_threshold = click.option(
 click_output_location = click.option(
     "--output-location",
     type=str,
-    default="data/processed",
+    default=None,
 )
 click_output_version = click.option(
     "--output-version",

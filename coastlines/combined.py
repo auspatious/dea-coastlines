@@ -568,14 +568,14 @@ def process_coastlines(
     config: dict,
     study_area: str,
     output_version: str,
-    output_location: str,
+    output_location: str | None,
     tide_data_location: str,
     buffer: float,
     log: callable,
     load_early: bool = True,
 ):
     # Study site geometry and config parsing
-    geometry = get_study_site_geometry(config["Input files"]["grid_path"], study_area)
+    geometry = get_study_site_geometry(config.input.grid_path, study_area)
     log.info(f"Loaded geometry for study area {study_area}")
 
     # Config shenanigans
@@ -594,7 +594,7 @@ def process_coastlines(
 
     # Loading data
     data = None
-    if config.get("STAC config") is not None:
+    if config.stac is not None:
         data, items = load_and_mask_data_with_stac(
             config,
             query,
@@ -647,11 +647,11 @@ def process_coastlines(
     # Load the modifications layer to add/remove areas from the analysis
     log.info("Loading vectors")
     modifications_gdf = gpd.read_file(
-        config["Input files"]["modifications_path"], bbox=bbox
+        config.input.modifications_path, bbox=bbox
     ).to_crs(str(combined_data.odc.crs))
 
-    geomorphology_url = config["Input files"].get("geomorphology_path")
-    if geomorphology_url is None:
+    geomorphology_url = config.input.geomorphology_path
+    if config.input.geomorphology_path is None:
         log.warning("Using empty geomorphology dataset")
         geomorphology_url = "data/raw/empty_modifications.geojson"
     geomorphology_gdf = gpd.read_file(
@@ -745,13 +745,16 @@ def cli(
     overwrite,
     load_early,
 ):
+    # Load analysis params from config file
+    config = load_config(config_path)
+
     log = configure_logging("Coastlines")
     log.info(
         f"Starting work on study area {study_area} for years {config.options.start_year}-{config.options.end_year}"
     )
 
-    # Load analysis params from config file
-    config = load_config(config_path)
+    if output_location is None:
+        output_location = config.output.location
 
     log.info("Checking output location")
     if overwrite is False:
@@ -771,12 +774,9 @@ def cli(
             sys.exit(0)
 
     log.info("Checking configuration")
-    virtual_product = config.get("Virtual product")
-    stac_config = config.get("STAC config")
-
-    if virtual_product is not None:
+    if config.virtual_product is not None:
         raise NotImplementedError("Virtual products are not yet implemented")
-    if stac_config is None:
+    if config.stac is None:
         raise ValueError("STAC config must be provided in config file")
 
     if config.aws.aws_unsigned and config.aws.aws_request_payer:

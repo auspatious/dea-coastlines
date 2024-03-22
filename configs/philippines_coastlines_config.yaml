@@ -15,14 +15,18 @@ stac:
   upper_scene_limit: 2500
 
 options:
-    start_year: 1985
-    end_year: 2023
-    baseline_year: 2021
+  start_year: 1985
+  end_year: 2023
+  baseline_year: 2021
 
-    water_index: "combined"
+  water_index: "combined"
 
-    mask_with_hillshade: True
-    mask_with_esa_wc: True
-    use_combined_index: True
+  mask_with_hillshade: True
+  mask_with_esa_wc: True
+  use_combined_index: True
 
-    load_buffer_distance: 1000
+  load_buffer_distance: 1000
+
+aws:
+  aws_unsigned: False
+  aws_request_payer: True
