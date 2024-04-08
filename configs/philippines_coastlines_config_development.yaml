@@ -9,13 +9,13 @@ output:
 
 stac:
   stac_api_url: "https://landsatlook.usgs.gov/stac-server"
-  stac_collections: 
+  stac_collections:
     - "landsat-c2l2-sr"
   lower_scene_limit: 250
   upper_scene_limit: 2000
 
 options:
-  start_year: 1985
+  start_year: 2003
   end_year: 2023
   baseline_year: 2021
 

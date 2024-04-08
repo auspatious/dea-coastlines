@@ -4,8 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Tuple, Union
 
-from coastlines.config import CoastlinesConfig
-
 import click
 import geopandas as gpd
 import xarray as xr
@@ -18,6 +16,7 @@ from pystac import ItemCollection
 from pystac_client import Client
 from s3path import S3Path
 
+from coastlines.config import CoastlinesConfig
 from coastlines.raster import tide_cutoffs
 
 # from dea_tools.datahandling import parallel_apply  # Needs a PR merged
@@ -273,7 +272,7 @@ def load_and_mask_data_with_stac(
             del ds["red"]
 
     # Optimising for the combined index
-    if optimise_combined:
+    if optimise_combined and not debug:
         ds = ds.drop_vars(["mndwi", "ndwi"])
         # We keep the 'combined' index, and also the 'nir' band
 
@@ -382,7 +381,11 @@ def filter_by_tides(
 
 
 def get_one_year_composite(
-    ds: xr.Dataset, year: int, water_index: str = "mndwi", include_nir: bool = False
+    ds: xr.Dataset,
+    year: int,
+    water_index: str = "mndwi",
+    include_nir: bool = False,
+    debug: bool = False,
 ) -> Tuple[int, xr.Dataset]:
     one_year = ds.sel(time=str(year))
     three_years = ds.sel(time=slice(str(year - 1), str(year + 1)))
@@ -393,16 +396,30 @@ def get_one_year_composite(
     year_summary["count"] = one_year[water_index].count(dim="time")
     year_summary["stdev"] = one_year[water_index].std(dim="time")
 
-    if include_nir:
-        year_summary["nir"] = one_year.nir08.median(dim="time")
-
     # And a gapfill summary for the three years
     year_summary[f"gapfill_{water_index}"] = three_years[water_index].median(dim="time")
     year_summary["gapfill_count"] = three_years[water_index].count(dim="time")
     year_summary["gapfill_stdev"] = three_years[water_index].std(dim="time")
 
+    # Optional extras
     if include_nir:
+        year_summary["nir"] = one_year.nir08.median(dim="time")
         year_summary["gapfill_nir"] = three_years.nir08.median(dim="time")
+
+    if debug:
+        year_summary["green"] = one_year.green.median(dim="time")
+        year_summary["swir"] = one_year.swir16.median(dim="time")
+
+        year_summary["gapfill_green"] = three_years.green.median(dim="time")
+        year_summary["gapfill_swir"] = three_years.swir16.median(dim="time")
+
+        # Get raw mndwi and ndwi values too
+        year_summary["mndwi"] = one_year.mndwi.median(dim="time")
+        year_summary["gapfill_mndwi"] = three_years.mndwi.median(dim="time")
+
+        if include_nir:
+            year_summary["ndwi"] = one_year.ndwi.median(dim="time")
+            year_summary["gapfill_ndwi"] = three_years.ndwi.median(dim="time")
 
     return year, year_summary
 
@@ -428,7 +445,7 @@ def generate_yearly_composites(
     def process_year(year):
         try:
             year, year_summary = get_one_year_composite(
-                ds, year, water_index=water_index, include_nir=include_nir
+                ds, year, water_index=water_index, include_nir=include_nir, debug=debug
             )
             return year, year_summary
         except KeyError:
